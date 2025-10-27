@@ -1,71 +1,77 @@
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
-const low = require('lowdb');
-const FileSync = require('lowdb/adapters/FileSync');
+const express = require("express");
+const cors = require("cors");
+const morgan = require("morgan");
+require("dotenv").config();
+const connectDB = require("./config/db");
+const Todo = require("./models/Todo");
 
+// Initialize express app
 const app = express();
-const adapter = new FileSync('db.json');
-const db = low(adapter);
 
-// Set default data in db.json
-db.defaults({ todos: [] }).write();
+// Connect to MongoDB
+connectDB();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(morgan('dev'));
+app.use(morgan("dev"));
 
 // Routes
 // Get all todos
-app.get('/api/todos', (req, res) => {
-  const todos = db.get('todos').value();
-  res.json(todos);
+app.get("/api/todos", async (req, res) => {
+  try {
+    const todos = await Todo.find().sort({ createdAt: -1 });
+    res.json(todos);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 // Add a new todo
-app.post('/api/todos', (req, res) => {
-  const todo = {
-    id: Date.now().toString(),
-    title: req.body.title,
-    content: req.body.content,
-    completed: false,
-    createdAt: new Date().toISOString()
-  };
-  
-  db.get('todos')
-    .push(todo)
-    .write();
-  
-  res.status(201).json(todo);
+app.post("/api/todos", async (req, res) => {
+  try {
+    const todo = new Todo({
+      title: req.body.title,
+      content: req.body.content,
+    });
+
+    const newTodo = await todo.save();
+    res.status(201).json(newTodo);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 
 // Update a todo
-app.put('/api/todos/:id', (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
-  
-  db.get('todos')
-    .find({ id })
-    .assign(updates)
-    .write();
-  
-  const updatedTodo = db.get('todos')
-    .find({ id })
-    .value();
-  
-  res.json(updatedTodo);
+app.put("/api/todos/:id", async (req, res) => {
+  try {
+    const todo = await Todo.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+
+    if (!todo) {
+      return res.status(404).json({ message: "Todo not found" });
+    }
+
+    res.json(todo);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 
 // Delete a todo
-app.delete('/api/todos/:id', (req, res) => {
-  const { id } = req.params;
-  
-  db.get('todos')
-    .remove({ id })
-    .write();
-  
-  res.status(204).end();
+app.delete("/api/todos/:id", async (req, res) => {
+  try {
+    const todo = await Todo.findByIdAndDelete(req.params.id);
+
+    if (!todo) {
+      return res.status(404).json({ message: "Todo not found" });
+    }
+
+    res.status(204).end();
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
